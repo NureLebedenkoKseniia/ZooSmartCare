@@ -19,13 +19,16 @@ class HardwareManager:
         self.servo.duty(0) # Початкове положення
 
     def read_sensors(self):
-        """Зчитує дані з датчика. Повертає (temp, hum) або (None, None) при помилці"""
+        """Зчитує дані з датчика. Повертає (temp, hum, light) або (None, None, None) при помилці"""
         try:
             self.sensor.measure()
-            return self.sensor.temperature(), self.sensor.humidity()
+            # Симулюємо рівень освітленості (наприклад, від 100 до 800 лк з невеликим шумом)
+            import random
+            simulated_light = round(random.uniform(200.0, 700.0), 1)
+            return self.sensor.temperature(), self.sensor.humidity(), simulated_light
         except OSError as e:
             print("Sensor Error:", e)
-            return None, None
+            return None, None, None
 
     def set_heater(self, state):
         self.heater.value(1 if state else 0)
@@ -46,24 +49,25 @@ class LogicController:
     """Клас реалізації бізнес-логіки"""
     def __init__(self, config):
         self.cfg = config
-        self.temp_history = [] # Буфер для ковзного середнього
-        self.FILTER_SIZE = 5   # Розмір вікна вибірки
+        self.temp_history = []  # Буфер для ковзного середнього температури
+        self.hum_history = []   # Буфер для вологості
+        self.light_history = [] # Буфер для освітленості
+        self.FILTER_SIZE = 5    # Розмір вікна вибірки
 
-    def filter_data(self, raw_temp):
+    def filter_data(self, raw_val, history_list):
         """
         Фільтрація шумів методом ковзного середнього (SMA)
-        Розділ 1.1 бізнес-логіки
         """
-        if raw_temp is None:
+        if raw_val is None:
             return None
             
-        self.temp_history.append(raw_temp)
-        if len(self.temp_history) > self.FILTER_SIZE:
-            self.temp_history.pop(0)
+        history_list.append(raw_val)
+        if len(history_list) > self.FILTER_SIZE:
+            history_list.pop(0)
             
         # Розрахунок середнього
-        avg_temp = sum(self.temp_history) / len(self.temp_history)
-        return round(avg_temp, 2)
+        avg_val = sum(history_list) / len(history_list)
+        return round(avg_val, 2)
 
     def process_climate(self, current_temp):
         """

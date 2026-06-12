@@ -109,20 +109,26 @@ logic = LogicController(config)
 
 # 4. Підключення до MQTT
 mqtt_client = None
+mqtt_connected = False
 client_id = f"ZooClient_{config.get('aviary_id', 'Unknown')}"
 
-try:
-    if USING_PAHO:
-        mqtt_client = mqtt.Client(client_id=client_id, callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
-        mqtt_client.connect(config['mqtt_server'], 1883, 60)
-        mqtt_client.loop_start()
-    else:
-        mqtt_client = MQTTClient(client_id, config['mqtt_server'])
-        mqtt_client.connect()
-        
-    print(f"✅ MQTT Connected to {config['mqtt_server']}")
-except Exception as e:
-    print(f"❌ MQTT Failed: {e}. Running in OFFLINE mode.")
+def try_mqtt_connect():
+    global mqtt_client, mqtt_connected
+    try:
+        if USING_PAHO:
+            mqtt_client = mqtt.Client(client_id=client_id, callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+            mqtt_client.connect(config['mqtt_server'], 1883, 60)
+            mqtt_client.loop_start()
+        else:
+            mqtt_client = MQTTClient(client_id, config['mqtt_server'])
+            mqtt_client.connect()
+        mqtt_connected = True
+        print(f"✅ MQTT Connected to {config['mqtt_server']}")
+    except Exception as e:
+        mqtt_connected = False
+        print(f"❌ MQTT Failed: {e}. Running in OFFLINE mode.")
+
+try_mqtt_connect()
 
 # --- Допоміжна функція годування ---
 def feed_animal_routine():
@@ -134,15 +140,19 @@ def feed_animal_routine():
 
 # --- MAIN LOOP ---
 last_feed_time = 0
+last_reconnect_time = 0
+telemetry_buffer = []
 
 try:
     while True:
         # A. Зчитування
-        raw_t, raw_h = hw.read_sensors()
-        filtered_t = logic.filter_data(raw_t)
+        raw_t, raw_h, raw_l = hw.read_sensors()
+        filtered_t = logic.filter_data(raw_t, logic.temp_history)
+        filtered_h = logic.filter_data(raw_h, logic.hum_history)
+        filtered_l = logic.filter_data(raw_l, logic.light_history)
         
         limits_info = f"[{config['temp_min']}..{config['temp_max']}]"
-        print(f"T: {filtered_t} {limits_info}, H: {raw_h}%")
+        print(f"T: {filtered_t} {limits_info}, H: {filtered_h}%, L: {filtered_l} lx")
 
         # B. Клімат-контроль
         status = "error"
@@ -172,18 +182,33 @@ try:
         payload = {
             "aviary_id": config['aviary_id'],
             "temp": filtered_t,
-            "hum": raw_h,
+            "hum": filtered_h,
+            "light": filtered_l,
             "heater": 1 if heat_on else 0,
             "fan": 1 if fan_on else 0,
             "status": status,
             "timestamp": time.time()
         }
 
-        # F. Відправка
-        if mqtt_client:
+        # F. Спроба реконнекту при потребі
+        if not mqtt_connected and (time.time() - last_reconnect_time > 30):
+            print("🔄 Attempting to reconnect to MQTT...")
+            last_reconnect_time = time.time()
+            try_mqtt_connect()
+
+        # G. Відправка / Буферизація
+        if mqtt_connected and mqtt_client:
             try:
-                msg_str = json.dumps(payload)
-                mqtt_client.publish("zoo/telemetry", msg_str)
+                # 1. Спершу вивантажуємо буферизовані дані (пакетна передача)
+                if telemetry_buffer:
+                    print(f"📦 Sending {len(telemetry_buffer)} buffered messages...")
+                    while telemetry_buffer:
+                        buf_payload = telemetry_buffer.pop(0)
+                        mqtt_client.publish("zoo/telemetry", json.dumps(buf_payload))
+                        time.sleep(0.1)
+                
+                # 2. Відправляємо поточні дані
+                mqtt_client.publish("zoo/telemetry", json.dumps(payload))
                 
                 if is_critical:
                     alert = {"level": "CRITICAL", "msg": f"Temp warning: {filtered_t}"}
@@ -194,7 +219,18 @@ try:
                     mqtt_client.publish("zoo/events", json.dumps(feed_evt))
                     
             except Exception as e:
-                print(f"MQTT Publish Error: {e}")
+                print(f"❌ MQTT Publish failed, buffering data: {e}")
+                mqtt_connected = False
+                if len(telemetry_buffer) < 500:
+                    telemetry_buffer.append(payload)
+        else:
+            # Немає зв'язку — буферизуємо телеметрію
+            print("💾 No MQTT connection. Telemetry buffered.")
+            if len(telemetry_buffer) < 500:
+                telemetry_buffer.append(payload)
+            else:
+                telemetry_buffer.pop(0)  # Видаляємо найстаріший при переповненні
+                telemetry_buffer.append(payload)
 
         time.sleep(5)
 

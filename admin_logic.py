@@ -16,7 +16,8 @@ from dependencies import (
 )
 from models import (
     User, Enclosure, Animal, IoTDevice, 
-    MaintenanceLog, Alert
+    MaintenanceLog, Alert, Species, ClimateProfile,
+    FeedingSchedule, SensorReading, MedicalRecord
 )
 from schemas import (
     UserCreate, UserResponse, UserUpdate, Token, 
@@ -30,6 +31,12 @@ router = APIRouter(prefix="/api/admin", tags=["Administration & Assets"])
 # ==============================================================================
 # А. АВТЕНТИФІКАЦІЯ (Вже було)
 # ==============================================================================
+
+@router.get("/auth/me", response_model=UserResponse)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Отримати інформацію про поточного авторизованого користувача (для мобільного додатку)"""
+    return current_user
+
 
 @router.post("/auth/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -196,6 +203,18 @@ def get_all_enclosures(
 ):
     """[NEW] Отримати список всіх вольєрів"""
     return db.query(Enclosure).all()
+
+@router.get("/enclosures/by-qr", response_model=EnclosureResponse)
+def get_enclosure_by_qr(
+    qr: str = Query(..., description="QR code string, e.g. zoo://enclosure/{uuid}"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """Пошук вольєра за QR-кодом (використовується мобільним QR-сканером)"""
+    enclosure = db.query(Enclosure).filter(Enclosure.qr_code_string == qr).first()
+    if not enclosure:
+        raise HTTPException(status_code=404, detail="Enclosure with this QR not found")
+    return enclosure
 
 @router.get("/enclosures/{enclosure_id}", response_model=EnclosureResponse)
 def get_enclosure_detail(
@@ -413,3 +432,193 @@ def system_health_check(
         "offline_devices_detected": len(offline_devices),
         "db_connection": "OK"
     }
+
+@router.get("/system/backup")
+def system_backup(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_role(["admin"]))
+):
+    """Експортувати всю базу даних в один JSON об'єкт"""
+    def row_to_dict(row):
+        d = {}
+        for column in row.__table__.columns:
+            val = getattr(row, column.name)
+            if isinstance(val, (datetime.date, datetime.datetime)):
+                d[column.name] = val.isoformat()
+            elif isinstance(val, datetime.time):
+                d[column.name] = val.strftime("%H:%M:%S")
+            else:
+                d[column.name] = val
+        return d
+
+    return {
+        "app_user": [row_to_dict(r) for r in db.query(User).all()],
+        "species": [row_to_dict(r) for r in db.query(Species).all()],
+        "enclosure": [row_to_dict(r) for r in db.query(Enclosure).all()],
+        "animal": [row_to_dict(r) for r in db.query(Animal).all()],
+        "climate_profile": [row_to_dict(r) for r in db.query(ClimateProfile).all()],
+        "feeding_schedule": [row_to_dict(r) for r in db.query(FeedingSchedule).all()],
+        "iot_device": [row_to_dict(r) for r in db.query(IoTDevice).all()],
+        "sensor_reading": [row_to_dict(r) for r in db.query(SensorReading).all()],
+        "alert": [row_to_dict(r) for r in db.query(Alert).all()],
+        "maintenance_log": [row_to_dict(r) for r in db.query(MaintenanceLog).all()],
+        "medical_record": [row_to_dict(r) for r in db.query(MedicalRecord).all()]
+    }
+
+@router.post("/system/restore")
+def system_restore(
+    data: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_role(["admin"]))
+):
+    """Відновити всю базу даних із надісланого JSON бекапу"""
+    try:
+        # Видаляємо записи у зворотному порядку зв'язків
+        db.query(MedicalRecord).delete()
+        db.query(MaintenanceLog).delete()
+        db.query(Alert).delete()
+        db.query(SensorReading).delete()
+        db.query(IoTDevice).delete()
+        db.query(FeedingSchedule).delete()
+        db.query(ClimateProfile).delete()
+        db.query(Animal).delete()
+        db.query(Enclosure).delete()
+        db.query(Species).delete()
+        db.query(User).delete()
+        db.commit()
+
+        # Вставляємо записи
+        for u in data.get("app_user", []):
+            db.add(User(**u))
+        for s in data.get("species", []):
+            db.add(Species(**s))
+        for e in data.get("enclosure", []):
+            db.add(Enclosure(**e))
+        db.commit() # Комітимо базові таблиці першими
+
+        for a in data.get("animal", []):
+            if a.get("birth_date"):
+                a["birth_date"] = datetime.date.fromisoformat(a["birth_date"])
+            db.add(Animal(**a))
+        for cp in data.get("climate_profile", []):
+            db.add(ClimateProfile(**cp))
+        for fs in data.get("feeding_schedule", []):
+            if fs.get("feed_time"):
+                fs["feed_time"] = datetime.time.fromisoformat(fs["feed_time"])
+            db.add(FeedingSchedule(**fs))
+        for dev in data.get("iot_device", []):
+            if dev.get("last_sync") and dev["last_sync"] != "None":
+                dev["last_sync"] = datetime.datetime.fromisoformat(dev["last_sync"])
+            else:
+                dev["last_sync"] = None
+            db.add(IoTDevice(**dev))
+        db.commit()
+
+        for sr in data.get("sensor_reading", []):
+            if sr.get("timestamp"):
+                sr["timestamp"] = datetime.datetime.fromisoformat(sr["timestamp"])
+            db.add(SensorReading(**sr))
+        for al in data.get("alert", []):
+            if al.get("timestamp"):
+                al["timestamp"] = datetime.datetime.fromisoformat(al["timestamp"])
+            db.add(Alert(**al))
+        for ml in data.get("maintenance_log", []):
+            if ml.get("timestamp"):
+                ml["timestamp"] = datetime.datetime.fromisoformat(ml["timestamp"])
+            db.add(MaintenanceLog(**ml))
+        for mr in data.get("medical_record", []):
+            if mr.get("event_date"):
+                mr["event_date"] = datetime.datetime.fromisoformat(mr["event_date"])
+            db.add(MedicalRecord(**mr))
+        
+        db.commit()
+        return {"detail": "Database restored successfully"}
+    except Exception as ex:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(ex)}")
+
+@router.get("/system/export/{table_name}")
+def export_table(
+    table_name: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_role(["admin"]))
+):
+    """Експортувати конкретну таблицю в JSON"""
+    table_mapping = {
+        "app_user": User,
+        "species": Species,
+        "enclosure": Enclosure,
+        "animal": Animal,
+        "climate_profile": ClimateProfile,
+        "feeding_schedule": FeedingSchedule,
+        "iot_device": IoTDevice,
+        "sensor_reading": SensorReading,
+        "alert": Alert,
+        "maintenance_log": MaintenanceLog,
+        "medical_record": MedicalRecord
+    }
+    if table_name not in table_mapping:
+        raise HTTPException(status_code=400, detail="Invalid table name")
+    
+    def row_to_dict(row):
+        d = {}
+        for column in row.__table__.columns:
+            val = getattr(row, column.name)
+            if isinstance(val, (datetime.date, datetime.datetime)):
+                d[column.name] = val.isoformat()
+            elif isinstance(val, datetime.time):
+                d[column.name] = val.strftime("%H:%M:%S")
+            else:
+                d[column.name] = val
+        return d
+
+    rows = db.query(table_mapping[table_name]).all()
+    return [row_to_dict(row) for row in rows]
+
+@router.post("/system/import/{table_name}")
+def import_table(
+    table_name: str,
+    records: List[dict],
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_role(["admin"]))
+):
+    """Імпортувати записи в конкретну таблицю (очищує та перезаписує)"""
+    table_mapping = {
+        "app_user": User,
+        "species": Species,
+        "enclosure": Enclosure,
+        "animal": Animal,
+        "climate_profile": ClimateProfile,
+        "feeding_schedule": FeedingSchedule,
+        "iot_device": IoTDevice,
+        "sensor_reading": SensorReading,
+        "alert": Alert,
+        "maintenance_log": MaintenanceLog,
+        "medical_record": MedicalRecord
+    }
+    if table_name not in table_mapping:
+        raise HTTPException(status_code=400, detail="Invalid table name")
+
+    try:
+        model_class = table_mapping[table_name]
+        # Очищуємо тільки цю таблицю
+        db.query(model_class).delete()
+        db.commit()
+
+        for r in records:
+            # Форматуємо дати та часи відповідно
+            for k, v in list(r.items()):
+                if v and isinstance(v, str):
+                    if k in ["birth_date", "event_date", "timestamp", "last_sync", "feed_time"]:
+                        if k == "birth_date":
+                            r[k] = datetime.date.fromisoformat(v)
+                        elif k == "feed_time":
+                            r[k] = datetime.time.fromisoformat(v)
+                        else:
+                            r[k] = datetime.datetime.fromisoformat(v)
+            db.add(model_class(**r))
+        db.commit()
+        return {"detail": f"Table '{table_name}' imported successfully"}
+    except Exception as ex:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(ex)}")

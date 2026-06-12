@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="uk" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZooSmartCare Portal</title>
+    <!-- Google Fonts & Material Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Background Blur Decorative Circles -->
+    <div class="bg-circle bg-circle-1"></div>
+    <div class="bg-circle bg-circle-2"></div>
+    <div class="bg-circle bg-circle-3"></div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="app" class="app-container">
+        
+        <!-- LOGIN SCREEN -->
+        <div id="view-login" class="view-screen login-wrapper active">
+            <div class="login-card glass-panel">
+                <h1 class="logo-text">ZooSmartCare</h1>
+                <p class="subtitle" data-i18n="login-subtitle">Sign in to manage your smart zoo portal</p>
+                
+                <form id="login-form" class="login-form">
+                    <div class="input-group">
+                        <label for="login-username" data-i18n="login-username-lbl">Full Name</label>
+                        <div class="input-with-icon">
+                            <span class="material-icons">person</span>
+                            <input type="text" id="login-username" placeholder="e.g. Super Admin" required autocomplete="username">
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="login-password" data-i18n="login-password-lbl">Password</label>
+                        <div class="input-with-icon">
+                            <span class="material-icons">lock</span>
+                            <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+                        </div>
+                    </div>
+                    
+                    <div id="login-error" class="error-text hidden"></div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <span data-i18n="login-btn">Login</span>
+                        <span class="material-icons">login</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- PORTAL MAIN WRAPPER (HIDDEN UNTIL LOGGED IN) -->
+        <div id="portal-layout" class="portal-layout hidden">
+            
+            <!-- SIDEBAR NAVIGATION -->
+            <aside class="sidebar glass-panel">
+                <div class="sidebar-header">
+                    <span class="material-icons logo-icon">pets</span>
+                    <span class="logo-title">ZooSmartCare</span>
+                </div>
+                
+                <div class="user-badge">
+                    <span class="material-icons user-avatar">account_circle</span>
+                    <div class="user-details">
+                        <span id="user-display-name" class="user-name">Guest</span>
+                        <span id="user-display-role" class="user-role">Guest</span>
+                    </div>
+                </div>
+
+                <nav class="nav-menu">
+                    <a href="#dashboard" class="nav-item active" data-view="view-dashboard">
+                        <span class="material-icons">dashboard</span>
+                        <span data-i18n="nav-dashboard">Dashboard</span>
+                    </a>
+                    <a href="#enclosures" class="nav-item" data-view="view-enclosures">
+                        <span class="material-icons">place</span>
+                        <span data-i18n="nav-enclosures">Enclosures</span>
+                    </a>
+                    <a href="#animals" class="nav-item" data-view="view-animals">
+                        <span class="material-icons">pets</span>
+                        <span data-i18n="nav-animals">Animals</span>
+                    </a>
+                    <a href="#alerts" class="nav-item" data-view="view-alerts">
+                        <span class="material-icons">notifications</span>
+                        <span data-i18n="nav-alerts">Alerts</span>
+                    </a>
+                    <a href="#species" class="nav-item" data-view="view-species">
+                        <span class="material-icons">menu_book</span>
+                        <span data-i18n="nav-species">Species & Rules</span>
+                    </a>
+                    <a href="#users" class="nav-item admin-only" data-view="view-users">
+                        <span class="material-icons">people</span>
+                        <span data-i18n="nav-users">Users</span>
+                    </a>
+                    <a href="#system" class="nav-item admin-only" data-view="view-system">
+                        <span class="material-icons">settings_applications</span>
+                        <span data-i18n="nav-system">System & Backup</span>
+                    </a>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <button id="logout-btn" class="btn btn-secondary btn-block">
+                        <span data-i18n="logout-btn">Log out</span>
+                        <span class="material-icons">logout</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- MAIN WORKING AREA -->
+            <main class="main-content">
+                
+                <!-- TOP HEADER BAR -->
+                <header class="top-bar glass-panel">
+                    <div class="header-search">
+                        <span id="current-view-title" class="view-title" data-i18n="nav-dashboard">Dashboard</span>
+                    </div>
+                    
+                    <div class="header-controls">
+                        <!-- Localization panel -->
+                        <div class="localization-panel">
+                            <label for="lang-select" class="material-icons">translate</label>
+                            <select id="lang-select" class="lang-select">
+                                <option value="uk" selected>UA</option>
+                                <option value="en">EN</option>
+                            </select>
+                        </div>
+                        
+                        <div class="direction-panel">
+                            <button id="dir-toggle" class="btn-icon" title="Toggle RTL/LTR">
+                                <span class="material-icons">format_textdirection_r_to_l</span>
+                            </button>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- WORKSPACE CONTENT PANELS -->
+                <div class="workspace-area">
+                    
+                    <!-- 1. DASHBOARD PANEL -->
+                    <section id="view-dashboard" class="workspace-panel active">
+                        <div class="dashboard-stats">
+                            <div class="stat-card glass-panel alert-card" id="card-alerts">
+                                <div class="stat-icon"><span class="material-icons">warning</span></div>
+                                <div class="stat-info">
+                                    <h3 data-i18n="stat-active-alerts">Active Alerts</h3>
+                                    <p id="stat-alerts-count">0</p>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel" id="card-enclosures">
+                                <div class="stat-icon"><span class="material-icons">place</span></div>
+                                <div class="stat-info">
+                                    <h3 data-i18n="stat-enclosures">Enclosures</h3>
+                                    <p id="stat-enclosures-count">0</p>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel" id="card-animals">
+                                <div class="stat-icon"><span class="material-icons">pets</span></div>
+                                <div class="stat-info">
+                                    <h3 data-i18n="stat-animals">Animals</h3>
+                                    <p id="stat-animals-count">0</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Analytical Reports Grid -->
+                        <div class="analytics-grid">
+                            <div class="chart-container glass-panel">
+                                <h2 data-i18n="chart-consumption-title">Daily Food Consumption (kg)</h2>
+                                <div class="chart-wrapper">
+                                    <canvas id="feeding-consumption-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-container glass-panel">
+                                <h2 data-i18n="chart-temperature-title">Avg Temperature per Enclosure (24h)</h2>
+                                <div class="chart-wrapper">
+                                    <canvas id="enclosure-temp-chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- 2. ENCLOSURES PANEL -->
+                    <section id="view-enclosures" class="workspace-panel">
+                        <div class="panel-header">
+                            <h2 data-i18n="enclosures-title">Enclosures</h2>
+                            <button id="add-enclosure-btn" class="btn btn-primary admin-zoologist-only">
+                                <span class="material-icons">add</span>
+                                <span data-i18n="btn-add-enclosure">Add Enclosure</span>
+                            </button>
+                        </div>
+                        <div class="grid-layout" id="enclosures-grid"></div>
+                    </section>
+
+                    <!-- 2B. ENCLOSURE DETAIL PANEL -->
+                    <section id="view-enclosure-detail" class="workspace-panel">
+                        <div class="panel-header">
+                            <button id="back-to-enclosures" class="btn btn-secondary">
+                                <span class="material-icons">arrow_back</span>
+                                <span data-i18n="btn-back">Back</span>
+                            </button>
+                            <h2 id="enclosure-detail-name">Enclosure Name</h2>
+                        </div>
+                        
+                        <div class="detail-grid">
+                            <!-- Telemetry Card -->
+                            <div class="detail-card glass-panel">
+                                <h3 data-i18n="enc-detail-telemetry">Telemetry Readings</h3>
+                                <div class="telemetry-gauges">
+                                    <div class="gauge">
+                                        <span class="material-icons gauge-icon">thermostat</span>
+                                        <div class="gauge-value" id="gauge-temp">--°C</div>
+                                        <div class="gauge-lbl" data-i18n="gauge-temp-lbl">Temperature</div>
+                                    </div>
+                                    <div class="gauge">
+                                        <span class="material-icons gauge-icon">water_drop</span>
+                                        <div class="gauge-value" id="gauge-humidity">--%</div>
+                                        <div class="gauge-lbl" data-i18n="gauge-hum-lbl">Humidity</div>
+                                    </div>
+                                    <div class="gauge">
+                                        <span class="material-icons gauge-icon">light_mode</span>
+                                        <div class="gauge-value" id="gauge-light">-- lx</div>
+                                        <div class="gauge-lbl" data-i18n="gauge-light-lbl">Light</div>
+                                    </div>
+                                </div>
+                                <div class="chart-wrapper mini-chart">
+                                    <canvas id="enclosure-history-chart"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Feeding Schedules & Logs -->
+                            <div class="detail-card glass-panel">
+                                <div class="tab-header">
+                                    <button class="tab-btn active" id="tab-feeding-btn" data-i18n="tab-feeding">Feeding</button>
+                                    <button class="tab-btn" id="tab-logs-btn" data-i18n="tab-logs">Maintenance Logs</button>
+                                </div>
+                                
+                                <div class="tab-content" id="tab-feeding-content">
+                                    <div class="list-actions">
+                                        <h4 data-i18n="tab-feeding-title">Schedules</h4>
+                                        <button id="add-schedule-btn" class="btn btn-primary btn-sm admin-zoologist-keeper-only">
+                                            <span class="material-icons">add</span>
+                                        </button>
+                                    </div>
+                                    <div class="scroll-list" id="feeding-schedule-list"></div>
+                                </div>
+                                
+                                <div class="tab-content hidden" id="tab-logs-content">
+                                    <div class="list-actions">
+                                        <h4 data-i18n="tab-logs-title">Logs</h4>
+                                        <button id="add-log-btn" class="btn btn-primary btn-sm tech-keeper-admin-only">
+                                            <span class="material-icons">add</span>
+                                        </button>
+                                    </div>
+                                    <div class="scroll-list" id="maintenance-logs-list"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- 3. ANIMALS PANEL -->
+                    <section id="view-animals" class="workspace-panel">
+                        <div class="panel-header">
+                            <h2 data-i18n="animals-title">Animals</h2>
+                            <div class="panel-actions">
+                                <input type="text" id="animal-search" placeholder="Search..." class="search-input">
+                                <button id="add-animal-btn" class="btn btn-primary admin-zoologist-only">
+                                    <span class="material-icons">add</span>
+                                    <span data-i18n="btn-add-animal">Add Animal</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid-layout" id="animals-grid"></div>
+                    </section>
+
+                    <!-- 3B. ANIMAL DETAIL PANEL -->
+                    <section id="view-animal-detail" class="workspace-panel">
+                        <div class="panel-header">
+                            <button id="back-to-animals" class="btn btn-secondary">
+                                <span class="material-icons">arrow_back</span>
+                                <span data-i18n="btn-back">Back</span>
+                            </button>
+                            <h2 id="animal-detail-name">Animal Name</h2>
+                        </div>
+                        
+                        <div class="detail-grid">
+                            <div class="detail-card glass-panel">
+                                <h3 data-i18n="animal-info-title">Card details</h3>
+                                <div class="animal-specs">
+                                    <div class="spec-row">
+                                        <strong data-i18n="spec-nickname">Nickname:</strong>
+                                        <span id="spec-nickname-val">--</span>
+                                    </div>
+                                    <div class="spec-row">
+                                        <strong data-i18n="spec-species">Species:</strong>
+                                        <span id="spec-species-val">--</span>
+                                    </div>
+                                    <div class="spec-row">
+                                        <strong data-i18n="spec-enclosure">Enclosure:</strong>
+                                        <span id="spec-enclosure-val">--</span>
+                                    </div>
+                                    <div class="spec-row">
+                                        <strong data-i18n="spec-birthdate">Birth Date:</strong>
+                                        <span id="spec-birthdate-val">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="detail-card glass-panel">
+                                <div class="list-actions">
+                                    <h3 data-i18n="animal-medical-title">Medical History</h3>
+                                    <button id="add-medical-btn" class="btn btn-primary btn-sm vet-only">
+                                        <span class="material-icons">add</span>
+                                    </button>
+                                </div>
+                                <div class="scroll-list" id="medical-records-list"></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- 4. ALERTS PANEL -->
+                    <section id="view-alerts" class="workspace-panel">
+                        <div class="panel-header">
+                            <h2 data-i18n="alerts-title">Active Alerts</h2>
+                        </div>
+                        <div class="list-container glass-panel" id="active-alerts-list"></div>
+                    </section>
+
+                    <!-- 5. SPECIES & RULES PANEL -->
+                    <section id="view-species" class="workspace-panel">
+                        <div class="panel-header">
+                            <h2 data-i18n="species-title">Species & Climate Rules</h2>
+                            <button id="add-species-btn" class="btn btn-primary admin-zoologist-only">
+                                <span class="material-icons">add</span>
+                                <span data-i18n="btn-add-species">Add Species</span>
+                            </button>
+                        </div>
+                        <div class="grid-layout" id="species-grid"></div>
+                    </section>
+
+                    <!-- 6. USERS PANEL (ADMIN ONLY) -->
+                    <section id="view-users" class="workspace-panel">
+                        <div class="panel-header">
+                            <h2 data-i18n="users-title">System Users</h2>
+                            <button id="add-user-btn" class="btn btn-primary">
+                                <span class="material-icons">person_add</span>
+                                <span data-i18n="btn-add-user">Add User</span>
+                            </button>
+                        </div>
+                        <div class="table-container glass-panel">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="th-name">Name</th>
+                                        <th data-i18n="th-role">Role</th>
+                                        <th data-i18n="th-contact">Contact Info</th>
+                                        <th data-i18n="th-actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-table-body"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- 7. SYSTEM & BACKUP PANEL (ADMIN ONLY) -->
+                    <section id="view-system" class="workspace-panel">
+                        <div class="panel-header">
+                            <h2 data-i18n="system-title">System Administration & Backups</h2>
+                        </div>
+                        
+                        <div class="detail-grid">
+                            <!-- Backup & Restore -->
+                            <div class="detail-card glass-panel">
+                                <h3 data-i18n="card-backup-title">Backup & Restore Database</h3>
+                                <p class="card-desc" data-i18n="card-backup-desc">Download a complete backup JSON file of the database or upload a previously saved file to restore the database tables.</p>
+                                
+                                <div class="action-buttons-group">
+                                    <button id="backup-download-btn" class="btn btn-primary">
+                                        <span class="material-icons">cloud_download</span>
+                                        <span data-i18n="btn-backup-download">Download Backup</span>
+                                    </button>
+                                    
+                                    <div class="file-upload-wrapper">
+                                        <button class="btn btn-secondary">
+                                            <span class="material-icons">cloud_upload</span>
+                                            <span data-i18n="btn-restore-upload">Restore Database</span>
+                                        </button>
+                                        <input type="file" id="restore-file-input" accept=".json">
+                                    </div>
+                                </div>
+                                <div id="backup-status" class="status-msg"></div>
+                            </div>
+                            
+                            <!-- Export & Import Specific Tables -->
+                            <div class="detail-card glass-panel">
+                                <h3 data-i18n="card-export-title">Export / Import Specific Tables</h3>
+                                <p class="card-desc" data-i18n="card-export-desc">Select a specific asset table (animals, enclosures, species, etc.) to export it as JSON or overwrite its current content using an import.</p>
+                                
+                                <div class="import-export-form">
+                                    <div class="input-group">
+                                        <label for="table-select" data-i18n="lbl-select-table">Select Table</label>
+                                        <select id="table-select" class="form-select">
+                                            <option value="app_user">Users</option>
+                                            <option value="species">Species</option>
+                                            <option value="enclosure">Enclosures</option>
+                                            <option value="animal">Animals</option>
+                                            <option value="climate_profile">Climate Profiles</option>
+                                            <option value="feeding_schedule">Feeding Schedules</option>
+                                            <option value="iot_device">IoT Devices</option>
+                                            <option value="alert">Alerts</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="action-buttons-group">
+                                        <button id="export-table-btn" class="btn btn-primary">
+                                            <span class="material-icons">download</span>
+                                            <span data-i18n="btn-export">Export</span>
+                                        </button>
+                                        
+                                        <div class="file-upload-wrapper">
+                                            <button class="btn btn-secondary">
+                                                <span class="material-icons">upload</span>
+                                                <span data-i18n="btn-import">Import</span>
+                                            </button>
+                                            <input type="file" id="import-file-input" accept=".json">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="export-status" class="status-msg"></div>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- REUSABLE DYNAMIC MODAL -->
+    <div id="modal-container" class="modal-backdrop hidden">
+        <div class="modal-card glass-panel">
+            <div class="modal-header">
+                <h3 id="modal-title">Modal Title</h3>
+                <button id="modal-close" class="btn-icon"><span class="material-icons">close</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="modal-form" class="modal-form"></form>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

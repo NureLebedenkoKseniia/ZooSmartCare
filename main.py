@@ -1,5 +1,6 @@
 import os
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 # Імпортуємо спільні налаштування (БД, engine) з dependencies
@@ -20,6 +21,14 @@ app = FastAPI(
     title="ZooSmartCare API",
     description="Integrated Zoo Management System",
     version="1.1"
+)
+
+# CORS — дозволяємо запити з мобільного та веб-клієнтів
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ПІДКЛЮЧЕННЯ РОУТЕРІВ

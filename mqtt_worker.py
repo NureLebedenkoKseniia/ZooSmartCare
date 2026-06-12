@@ -128,28 +128,37 @@ def save_to_db(data: dict):
     except:
         device_id = 1
 
-    # 2. Перевірка інтервалу (Throttle)
-    current_time = time.time()
+    # 2. Отримуємо позначку часу з повідомлення або використовуємо поточний UTC
+    payload_ts = data.get("timestamp")
+    if payload_ts:
+        # payload_ts is a float (UNIX epoch seconds)
+        reading_time = datetime.fromtimestamp(payload_ts, tz=timezone.utc).replace(tzinfo=None)
+        msg_time_seconds = payload_ts
+    else:
+        reading_time = datetime.now(timezone.utc).replace(tzinfo=None)
+        msg_time_seconds = time.time()
+
+    # 3. Перевірка інтервалу (Throttle)
     last_time = last_save_time.get(device_id, 0)
-    
-    if current_time - last_time < SAVE_INTERVAL_SECONDS:
+    if msg_time_seconds - last_time < SAVE_INTERVAL_SECONDS:
         return
 
-    # 3. Збереження в БД
+    # 4. Збереження в БД
     db = SessionLocal()
     try:
         # Спочатку почистимо старі дані
         clean_old_data(db)
 
         current_temp = float(data.get("temp"))
+        light_value = float(data.get("light", 0.0))
 
         # Створюємо новий запис
         record = SensorReading(
             device_id=device_id,
             temperature_val=current_temp,
             humidity_val=data.get("hum"),
-            light_val=0.0,
-            timestamp=datetime.now(timezone.utc).replace(tzinfo=None)
+            light_val=light_value,
+            timestamp=reading_time
         )
         
         db.add(record)
@@ -160,8 +169,8 @@ def save_to_db(data: dict):
         db.commit()
         
         # Оновлюємо час останнього запису
-        last_save_time[device_id] = current_time
-        print(f"💾 [DB SAVED] Device {device_id}: T={current_temp}°C (Next save in {SAVE_INTERVAL_SECONDS}s)")
+        last_save_time[device_id] = msg_time_seconds
+        print(f"💾 [DB SAVED] Device {device_id}: T={current_temp}°C, L={light_value} lx (Time: {reading_time})")
         
     except Exception as e:
         print(f"❌ DB Save Error: {e}")

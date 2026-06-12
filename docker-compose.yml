@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # Database Service (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: zoosmartcare-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "12345"
+      POSTGRES_DB: ZooSmartCare
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Web Application Service
+  web-app:
+    build: .
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://postgres:12345@db:5432/ZooSmartCare"
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  # Nginx Load Balancer Service (Port 80)
+  nginx:
+    image: nginx:alpine
+    container_name: zoosmartcare-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web-app
+
+  # Locust Load Testing Tool
+  locust:
+    image: locustio/locust:latest
+    container_name: zoosmartcare-locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./locustfile.py:/mnt/locust/locustfile.py
+    command: -f /mnt/locust/locustfile.py --host http://nginx
+
+volumes:
+  pgdata:

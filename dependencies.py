@@ -17,7 +17,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Налаштування БД
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:12345@127.0.0.1:5432/ZooSmartCare"
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:12345@127.0.0.1:5432/ZooSmartCare")
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"client_encoding": "utf8"} 
